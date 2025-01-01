@@ -1,0 +1,201 @@
+import SwiftUI
+import Charts
+
+// 定義記錄模型
+struct Expense: Identifiable {
+    var id = UUID()
+    var amount: Double
+    var description: String
+    var date: Date
+    var category: String
+}
+
+// 主視圖
+struct ContentView: View {
+    @State private var expenses: [Expense] = []
+    @State private var newAmount: String = ""
+    @State private var newDescription: String = ""
+    @State private var selectedDate = Date()
+    @State private var selectedCategory = "支出"
+    @State private var showChart = false // 控制畫面切換
+
+    let categories = ["支出", "收入"]
+
+    var body: some View {
+        NavigationView {
+            ZStack {
+                VStack {
+                    if showChart {
+                        // 支出圓餅圖畫面
+                        ChartView(expenses: expenses)
+                            .frame(height: 300)
+                            .padding()
+                        Text(monthlySummary())
+                            .font(.headline)
+                            .padding()
+                        Spacer()
+                    } else {
+                        // 記帳畫面
+                        Form {
+                            Section(header: Text("新增記錄")) {
+                                TextField("金額", text: $newAmount)
+                                    .keyboardType(.decimalPad)
+                                TextField("描述", text: $newDescription)
+                                DatePicker("日期", selection: $selectedDate, displayedComponents: .date)
+                                Picker("類別", selection: $selectedCategory) {
+                                    ForEach(categories, id: \.self) { category in
+                                        Text(category)
+                                    }
+                                }
+                            }
+
+                            Button(action: addExpense) {
+                                Text("新增記錄")
+                                    .frame(maxWidth: .infinity)
+                                    .foregroundColor(.white)
+                                    .padding()
+                                    .background(Color.blue)
+                                    .cornerRadius(8)
+                            }
+                        }
+
+                        // 顯示記錄清單，按時間降序排列
+                        List {
+                            ForEach(expenses.sorted(by: { $0.date > $1.date })) { expense in
+                                HStack {
+                                    VStack(alignment: .leading) {
+                                        Text(expense.description)
+                                            .font(.headline)
+                                        Text("\(expense.date, formatter: dateFormatter)")
+                                            .font(.caption)
+                                    }
+                                    Spacer()
+                                    Text(String(format: "$%.2f", expense.amount))
+                                        .foregroundColor(expense.category == "支出" ? .red : .green)
+                                }
+                            }
+                            .onDelete(perform: deleteExpense)
+                        }
+                    }
+                }
+
+                // 底部切換按鈕
+                VStack {
+                    Spacer()
+                    Button(action: {
+                        withAnimation {
+                            showChart.toggle()
+                        }
+                    }) {
+                        Text(showChart ? "返回記帳功能" : "顯示支出圓餅圖")
+                            .frame(maxWidth: .infinity)
+                            .foregroundColor(.white)
+                            .padding()
+                            .background(showChart ? Color.orange : Color.green)
+                            .cornerRadius(8)
+                            .padding()
+                    }
+                }
+            }
+            .navigationTitle("記帳 App")
+            .toolbar {
+                EditButton()
+            }
+        }
+    }
+
+    // 新增記錄
+    func addExpense() {
+        if let amount = Double(newAmount), !newDescription.isEmpty {
+            let newExpense = Expense(
+                amount: amount,
+                description: newDescription,
+                date: selectedDate,
+                category: selectedCategory
+            )
+            expenses.append(newExpense)
+            newAmount = ""
+            newDescription = ""
+        }
+    }
+
+    // 刪除記錄
+    func deleteExpense(at offsets: IndexSet) {
+        expenses.remove(atOffsets: offsets)
+    }
+
+    // 計算這個月的收入與支出
+    func monthlySummary() -> String {
+        let calendar = Calendar.current
+        let currentMonthExpenses = expenses.filter { expense in
+            calendar.isDate(expense.date, equalTo: Date(), toGranularity: .month)
+        }
+
+        let totalIncome = currentMonthExpenses
+            .filter { $0.category == "收入" }
+            .reduce(0) { $0 + $1.amount }
+
+        let totalExpense = currentMonthExpenses
+            .filter { $0.category == "支出" }
+            .reduce(0) { $0 + $1.amount }
+
+        let balance = totalIncome - totalExpense
+        return balance >= 0 ? "本月結餘：+$\(balance)" : "本月赤字：-$\(-balance)"
+    }
+
+    // 日期格式
+    private var dateFormatter: DateFormatter {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        return formatter
+    }
+}
+
+// 支出圓餅圖視圖
+struct ChartView: View {
+    var expenses: [Expense]
+
+    var body: some View {
+        VStack {
+            let expenseCategories = expenses
+                .filter { $0.category == "支出" }
+                .reduce(into: [String: Double]()) { result, expense in
+                    result[expense.description, default: 0] += expense.amount
+                }
+
+            if expenseCategories.isEmpty {
+                Text("尚無支出數據")
+                    .font(.headline)
+                    .foregroundColor(.gray)
+            } else {
+                Chart(expenseCategories.sorted(by: { $0.value > $1.value }), id: \.key) { key, value in
+                    SectorMark(angle: .value("支出", value), innerRadius: .ratio(0.6), angularInset: 1)
+                        .foregroundStyle(by: .value("項目", key))
+                }
+                .chartLegend(position: .bottom)
+                .frame(height: 300)
+            }
+        }
+    }
+}
+
+struct ContentView_Previews: PreviewProvider {
+    static var previews: some View {
+        ContentView()
+    }
+}
+
+
+
+
+
+import SwiftUI
+
+@main
+struct finalpj_hookApp: App {
+    var body: some Scene {
+        WindowGroup {
+            ContentView() // 設定主視圖為 ContentView
+        }
+    }
+}
